@@ -12,6 +12,7 @@ import java.nio.charset.Charset;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -142,7 +143,9 @@ public class DockerCapsule extends Capsule {
             return null;
         }
 
-        final ProcessBuilder pb2 = new ProcessBuilder("docker", "run", imageName);
+        List<String> command = new ArrayList<>(Arrays.asList("docker", "run", imageName));
+        command.addAll(args);
+        final ProcessBuilder pb2 = new ProcessBuilder(command);
         return pb2;
     }
 
