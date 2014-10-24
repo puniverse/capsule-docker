@@ -118,9 +118,8 @@ public class DockerCapsule extends Capsule {
 
     @Override
     protected ProcessBuilder prelaunch(List<String> args) {
-        final boolean build = systemPropertyEmptyOrTrue(PROP_BUILD_IMAGE);
-        final String imageName = getAppId().replace('.', '_').toLowerCase();
-        if (build || needsBuild()) {
+        final String imageName = getImageName();
+        if (needsBuild()) {
             log(LOG_VERBOSE, "Building docker image");
             // Use the original ProcessBuilder to create the Dockerfile
             final ProcessBuilder pb = super.prelaunch(args);
@@ -136,17 +135,23 @@ public class DockerCapsule extends Capsule {
             } catch (IOException e) {
                 throw new RuntimeException(e);
             }
+            log(LOG_QUIET, "Built docker image " + imageName);
         }
 
-        if (build) {
-            log(LOG_QUIET, "Built image " + imageName);
+        final boolean build = systemPropertyEmptyOrTrue(PROP_BUILD_IMAGE);
+        if (!build) {
+            final List<String> command = new ArrayList<>(Arrays.asList("docker", "run"));
+            // TODO: add docker options
+            command.add(imageName);
+            command.addAll(args);
+            final ProcessBuilder pb2 = new ProcessBuilder(command);
+            return pb2;
+        } else
             return null;
-        }
-
-        List<String> command = new ArrayList<>(Arrays.asList("docker", "run", imageName));
-        command.addAll(args);
-        final ProcessBuilder pb2 = new ProcessBuilder(command);
-        return pb2;
+    }
+    
+    private String getImageName() {
+        return (getAppName() + (getAppVersion() != null ? ":" + getAppVersion() : "")).replace('.', '_').toLowerCase();
     }
 
     private void writeDockerfile(Path file, ProcessBuilder pb) throws IOException {
