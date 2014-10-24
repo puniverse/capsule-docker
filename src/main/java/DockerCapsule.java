@@ -27,7 +27,6 @@ public class DockerCapsule extends Capsule {
     private static final String CONF_FILE = "Dockerfile";
 
     private static final String PROP_BUILD_IMAGE = "capsule.image";
-    private static final String PROP_HYPERVISOR = "capsule.osv.hypervisor";
 
     private static final String PROP_FILE_SEPARATOR = "file.separator";
 
@@ -41,6 +40,8 @@ public class DockerCapsule extends Capsule {
     private static final String PATH_APP = PATH_ROOT + "app";
     private static final String PATH_DEP = PATH_ROOT + "dep";
 
+    private static final String DOCKERIZED_FILE_NAME = ".dockerized";
+
     private static final String FILE_SEPARATOR = System.getProperty(PROP_FILE_SEPARATOR);
 
     private final Path localRepo;
@@ -50,6 +51,21 @@ public class DockerCapsule extends Capsule {
     public DockerCapsule(Path jarFile, Path cacheDir) {
         super(jarFile, cacheDir);
         this.localRepo = getLocalRepo();
+    }
+
+    @Override
+    protected boolean needsAppCache() {
+        return true;
+    }
+
+    @Override
+    protected void markCache() throws IOException {
+        super.markCache();
+        Files.createFile(getAppCache().resolve(DOCKERIZED_FILE_NAME));
+    }
+
+    private boolean needsBuild() {
+        return !isAppCacheUpToDate() || !Files.exists(getAppCache().resolve(DOCKERIZED_FILE_NAME));
     }
 
     private Path createContextDir() throws IOException {
@@ -91,7 +107,7 @@ public class DockerCapsule extends Capsule {
 //    }
     @Override
     protected Map<String, String> buildEnvironmentVariables(Map<String, String> env) {
-        return super.buildEnvironmentVariables(new HashMap<String, String>());
+        return super.buildEnvironmentVariables(new HashMap<String, String>()); // don't import host's environment
     }
 
     @Override
@@ -102,31 +118,32 @@ public class DockerCapsule extends Capsule {
     @Override
     protected ProcessBuilder prelaunch(List<String> args) {
         final boolean build = systemPropertyEmptyOrTrue(PROP_BUILD_IMAGE);
-        try {
+        final String imageName = getAppId().replace('.', '_').toLowerCase();
+        if (build || needsBuild()) {
+            log(LOG_VERBOSE, "Building docker image");
             // Use the original ProcessBuilder to create the Dockerfile
             final ProcessBuilder pb = super.prelaunch(args);
+            pb.command(pb.command().subList(0, pb.command().size() - args.size())); // remove args
+            try {
+                this.context = createContextDir();
+                writeDockerfile(context.resolve(CONF_FILE), pb);
 
-            this.context = createContextDir();
-            writeDockerfile(context.resolve(CONF_FILE), pb);
+                log(LOG_VERBOSE, "Dockerfile: " + context.resolve(CONF_FILE));
 
-            log(LOG_VERBOSE, "Dockerfile: " + context.resolve(CONF_FILE));
-
-            // ... and create a new ProcessBuilder to launch docker
-            final String imageName = getAppId().replace('.', '_').toLowerCase();
-            
-            final ProcessBuilder pb1 = new ProcessBuilder();
-            pb1.directory(context.toFile());
-
-            pb1.command().add("docker");
-            pb1.command().add("build");
-            pb1.command().add("-q");
-            pb1.command().addAll(Arrays.asList("-t", imageName));
-            pb1.command().add(".");
-
-            return pb1;
-        } catch (IOException e) {
-            throw new RuntimeException(e);
+                // ... and launch docker
+                exec(new ProcessBuilder("docker", "build", "-q", "-t", imageName, ".").directory(context.toFile()));
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
         }
+
+        if (build) {
+            log(LOG_QUIET, "Built image " + imageName);
+            return null;
+        }
+
+        final ProcessBuilder pb2 = new ProcessBuilder("docker", "run", imageName);
+        return pb2;
     }
 
     private void writeDockerfile(Path file, ProcessBuilder pb) throws IOException {
@@ -190,7 +207,8 @@ public class DockerCapsule extends Capsule {
         super.cleanup();
 
         try {
-            delete(context);
+            if (context != null)
+                delete(context);
         } catch (Throwable t) {
             t.printStackTrace();
         }
