@@ -149,7 +149,7 @@ public class DockerCapsule extends Capsule {
         } else
             return null;
     }
-    
+
     private String getImageName() {
         return (getAppName() + (getAppVersion() != null ? ":" + getAppVersion() : "")).replace('.', '_').toLowerCase();
     }
@@ -158,12 +158,12 @@ public class DockerCapsule extends Capsule {
         try (PrintWriter out = new PrintWriter(new OutputStreamWriter(Files.newOutputStream(file), Charset.defaultCharset()))) {
             out.println("FROM " + getBaseImage());
 
-            out.println("WORKDIR /");
-
+            out.println("ADD dep /dep");
             out.println("ADD " + getJarFile().getFileName() + " /");
             if (getAppCache() != null)
                 out.println("ADD app /app");
-            out.println("ADD dep /dep");
+
+            out.println("WORKDIR /");
 
             for (Map.Entry<String, String> env : pb.environment().entrySet())
                 out.println("ENV " + env.getKey() + " " + env.getValue());
