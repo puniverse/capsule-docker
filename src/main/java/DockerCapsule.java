@@ -33,7 +33,10 @@ public class DockerCapsule extends Capsule {
 
     private static final String ATTR_JAVA_VERSION = "Java-Version";
     private static final String ATTR_JDK_REQUIRED = "JDK-Required";
+
     private static final String ATTR_EXPOSE = "Expose-Ports";
+    private static final String ATTR_MEMORY = "Required-RAM";
+    private static final String ATTR_CPUS = "Num-Cores";
 
     private static final String LATEST_JDK = "8";
 
@@ -48,6 +51,10 @@ public class DockerCapsule extends Capsule {
     private final Path localRepo;
     private final Set<Path> deps = new HashSet<>();
     private Path context;
+
+    static {
+        registerOption(PROP_BUILD_IMAGE, null, "false", "Builds the docker image without launching the app.");
+    }
 
     public DockerCapsule(Path jarFile, Path cacheDir) {
         super(jarFile, cacheDir);
@@ -138,7 +145,7 @@ public class DockerCapsule extends Capsule {
             log(LOG_QUIET, "Built docker image " + imageName);
         }
 
-        final boolean build = systemPropertyEmptyOrTrue(PROP_BUILD_IMAGE);
+        final boolean build = Boolean.parseBoolean(System.getProperty(PROP_BUILD_IMAGE));
         if (!build) {
             final List<String> command = new ArrayList<>(Arrays.asList("docker", "run"));
             // TODO: add docker options
@@ -262,12 +269,5 @@ public class DockerCapsule extends Capsule {
     private boolean getAttribute(String attr, boolean defaultValue) {
         final String val = getAttribute(attr);
         return val != null ? Boolean.parseBoolean(val) : defaultValue;
-    }
-
-    private static boolean systemPropertyEmptyOrTrue(String property) {
-        final String value = System.getProperty(property);
-        if (value == null)
-            return false;
-        return value.isEmpty() || Boolean.parseBoolean(value);
     }
 }
