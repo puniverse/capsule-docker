@@ -35,8 +35,6 @@ public class DockerCapsule extends Capsule {
     private static final String ATTR_JDK_REQUIRED = "JDK-Required";
 
     private static final String ATTR_EXPOSE = "Expose-Ports";
-    private static final String ATTR_MEMORY = "Required-RAM";
-    private static final String ATTR_CPUS = "Num-Cores";
 
     private static final String LATEST_JDK = "8";
 
@@ -48,6 +46,8 @@ public class DockerCapsule extends Capsule {
 
     private static final String FILE_SEPARATOR = System.getProperty(PROP_FILE_SEPARATOR);
 
+    private static final String DOCKER_NATIVE_LIB_PATH = "/usr/java/packages/lib/amd64:/usr/lib/x86_64-linux-gnu/jni:/lib/x86_64-linux-gnu:/usr/lib/x86_64-linux-gnu:/usr/lib/jni:/lib:/usr/lib";
+    
     private final Path localRepo;
     private final Set<Path> deps = new HashSet<>();
     private Path context;
@@ -56,8 +56,8 @@ public class DockerCapsule extends Capsule {
         registerOption(PROP_BUILD_IMAGE, null, "false", "Builds the docker image without launching the app.");
     }
 
-    public DockerCapsule(Path jarFile, Path cacheDir) {
-        super(jarFile, cacheDir);
+    public DockerCapsule(Capsule pred) {
+        super(pred);
         this.localRepo = getLocalRepo();
     }
 
@@ -102,11 +102,17 @@ public class DockerCapsule extends Capsule {
 
     @Override
     protected List<Path> getPlatformNativeLibraryPath() {
-        return Arrays.asList(Paths.get("/usr/java/packages/lib/amd64"), Paths.get("/usr/lib/x86_64-linux-gnu/jni"),
-                Paths.get("/lib/x86_64-linux-gnu"), Paths.get("/usr/lib/x86_64-linux-gnu"), Paths.get("/usr/lib/jni"), Paths.get("/lib"),
-                Paths.get("/usr/lib"));
+        return splitClassPath(DOCKER_NATIVE_LIB_PATH);
     }
 
+    @Override
+    protected Path chooseJavaHome() {
+        final boolean jdk = getAttribute(ATTR_JDK_REQUIRED, false);
+        String jh = "/usr/lib/jvm/java-" + getJavaVersion() + "-openjdk-amd64" + (jdk ? "" : "/jre");
+        return Paths.get(jh);
+    }
+
+    
 //    @Override
 //    protected Map<String, String> buildSystemProperties() {
 //        Map<String, String> res = super.buildSystemProperties();
@@ -124,7 +130,7 @@ public class DockerCapsule extends Capsule {
     }
 
     @Override
-    protected ProcessBuilder prelaunch(List<String> args) {
+    protected final ProcessBuilder prelaunch(List<String> args) {
         final String imageName = getImageName();
         if (needsBuild()) {
             log(LOG_VERBOSE, "Building docker image");
@@ -148,13 +154,25 @@ public class DockerCapsule extends Capsule {
         final boolean build = Boolean.parseBoolean(System.getProperty(PROP_BUILD_IMAGE));
         if (!build) {
             final List<String> command = new ArrayList<>(Arrays.asList("docker", "run"));
-            // TODO: add docker options
+            command.addAll(buildDockerArgs());
             command.add(imageName);
             command.addAll(args);
             final ProcessBuilder pb2 = new ProcessBuilder(command);
             return pb2;
         } else
             return null;
+    }
+
+    protected List<String> buildDockerArgs() {
+        final List<String> args = new ArrayList<>();
+
+        // TODO ... 
+        if (false)
+            args.add("-d");
+        else
+            args.add("--rm=true");
+
+        return args;
     }
 
     private String getImageName() {
@@ -184,13 +202,20 @@ public class DockerCapsule extends Capsule {
 
     private String getBaseImage() {
         final boolean jdk = getAttribute(ATTR_JDK_REQUIRED, false);
-        final String version = hasAttribute(ATTR_JAVA_VERSION) ? javaVersion(getAttribute(ATTR_JAVA_VERSION)) : LATEST_JDK;
-        return "java:" + version + "-" + (jdk ? "jdk" : "jre");
+        return "java:" + getJavaVersion() + "-" + (jdk ? "jdk" : "jre");
+    }
+    
+    private String getJavaVersion() {
+        return hasAttribute(ATTR_JAVA_VERSION) ? javaVersion(getAttribute(ATTR_JAVA_VERSION)) : LATEST_JDK;
     }
 
     private String move(Path p) {
         p = p.normalize().toAbsolutePath();
         if (p.equals(getJavaExecutable().toAbsolutePath()))
+            return getJavaExecutable().toString();
+        if (p.equals(getJavaHome()))
+            return toString(getJavaHome());
+        if (p.equals(getJavaHome().toAbsolutePath()))
             return getJavaExecutable().toString();
         if (p.equals(getJarFile()))
             return moveJarFile(p);
@@ -263,6 +288,14 @@ public class DockerCapsule extends Capsule {
             return vs[0];
         } else
             return vs[1];
+    }
+
+    private static List<Path> splitClassPath(String classPath) {
+        final String[] ps = classPath.split(":");
+        final List<Path> res = new ArrayList<>(ps.length);
+        for (String p : ps)
+            res.add(Paths.get(p));
+        return res;
     }
 
     // copied from Capsule
