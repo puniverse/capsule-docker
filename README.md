@@ -1,4 +1,4 @@
-# Capsule Shield
+# Capsule Docker
 
 A caplet that wraps a [capsule](https://github.com/puniverse/capsule) in a [Docker](https://docker.com/) container.
 
