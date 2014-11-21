@@ -83,7 +83,7 @@ public class DockerCapsule extends Capsule {
             final Path contextApp = contextDir.resolve("app");
             copy(getAppCache(), contextApp);
         }
-        Path contextDep = contextDir.resolve("dep");
+        final Path contextDep = contextDir.resolve("dep");
         Files.createDirectory(contextDep);
         for (Path d : deps)
             Files.copy(d, contextDep.resolve(d.getFileName()));
@@ -215,8 +215,6 @@ public class DockerCapsule extends Capsule {
             return getJavaExecutable().toString();
         if (p.equals(getJavaHome()))
             return toString(getJavaHome());
-        if (p.equals(getJavaHome().toAbsolutePath()))
-            return getJavaExecutable().toString();
         if (p.equals(getJarFile()))
             return moveJarFile(p);
         else if (getAppCache() != null && p.startsWith(getAppCache()))
